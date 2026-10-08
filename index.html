@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kahoot Agronomía</title>
+<script src="/socket.io/socket.io.js"></script>
+<script src="/questions.js"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:linear-gradient(135deg,#101827,#172554);color:#fff;min-height:100vh}
+main{max-width:900px;margin:auto;padding:24px}.card{background:#1e293bf5;border:1px solid #334155;border-radius:24px;padding:28px;box-shadow:0 18px 50px #0005}
+h1{font-size:clamp(32px,6vw,54px);margin:0 0 8px}.sub{color:#cbd5e1}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px}
+button,input,select{font:inherit;border-radius:12px;border:1px solid #475569;padding:13px}input,select{width:100%;background:#0f172a;color:#fff}button{cursor:pointer;background:#334155;color:#fff;font-weight:800;min-height:48px}button.primary{background:#22c55e;color:#052e16;border:0}button:disabled{opacity:.45;cursor:not-allowed}
+.panel{background:#273449;border-radius:18px;padding:20px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}.hidden{display:none!important}.code{font-size:clamp(38px,10vw,76px);font-weight:900;letter-spacing:8px;text-align:center}.center{text-align:center}.players{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:16px}.player{background:#334155;border-radius:12px;padding:12px}.question{font-size:clamp(25px,4vw,40px);line-height:1.2;margin:24px 0}.answers{display:grid;grid-template-columns:1fr 1fr;gap:14px}.ans{min-height:85px;text-align:left;font-size:18px}.ans.correct{background:#166534}.ans.wrong{background:#991b1b}.timer{font-size:40px;font-weight:900}.bar{height:10px;background:#475569;border-radius:99px;overflow:hidden}.fill{height:100%;background:#38bdf8;width:100%;transition:width .1s linear}.rank{display:flex;justify-content:space-between;padding:14px;border-bottom:1px solid #475569}.rank:first-child{background:#365314;border-radius:12px}.error{color:#fca5a5;margin-top:12px}.muted{color:#94a3b8}
+@media(max-width:650px){.grid,.answers{grid-template-columns:1fr}.card{padding:18px}main{padding:10px}}
+</style>
+</head>
+<body><main>
+<div id="app" class="card">
+<section id="home">
+<h1>🌱 Kahoot Agronomía</h1><p class="sub">Compite en tiempo real con tus amigos usando las 150 preguntas.</p>
+<div class="grid">
+<div class="panel"><h2>👑 Crear partida</h2>
+<input id="hostName" placeholder="Tu nombre" maxlength="24">
+<select id="count"><option value="all">150 preguntas</option><option value="50">50 preguntas</option><option value="25">25 preguntas</option><option value="10">10 preguntas</option></select>
+<select id="theme"></select><button class="primary" id="create">Crear sala</button></div>
+<div class="panel"><h2>🎮 Unirme</h2><input id="room" inputmode="numeric" placeholder="Código de 6 dígitos" maxlength="6"><input id="playerName" placeholder="Tu nombre" maxlength="24"><button class="primary" id="join">Entrar a sala</button></div>
+</div><div id="err" class="error"></div>
+</section>
+
+<section id="lobby" class="hidden center"><h2>Tu sala</h2><div class="code" id="code"></div><p class="muted">Comparte este código con tus amigos.</p><div id="lobbyPlayers" class="players"></div><div class="actions"><button class="primary" id="start">🚀 Comenzar</button><button id="leave">Salir</button></div></section>
+
+<section id="game" class="hidden"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><b id="qnum"></b><span class="timer" id="timer"></span></div><div class="bar"><div class="fill" id="fill"></div></div><div class="muted" id="topic"></div><div class="question" id="q"></div><div class="answers" id="answers"></div><p id="status" class="center muted"></p></section>
+
+<section id="reveal" class="hidden center"><h2 id="revealTitle"></h2><div id="leaderboard"></div><button class="primary" id="next">Siguiente →</button></section>
+<section id="finish" class="hidden center"><h1>🏆 Podio final</h1><div id="finalBoard"></div><button class="primary" id="again">Nueva partida</button></section>
+</div></main>
+<script>
+const socket=io();let isHost=false,currentTime=30,timer=null;
+const $=id=>document.getElementById(id);
+const sections=["home","lobby","game","reveal","finish"];
+function show(id){sections.forEach(x=>$(x).classList.toggle("hidden",x!==id))}
+function err(x){$("err").textContent=x||""}
+[...new Set(QUESTIONS.map(q=>q.tema))].forEach(t=>{$("theme").add(new Option(t,t))});$("theme").add(new Option("Todos los temas","all"),0);
+
+$("create").onclick=()=>{err("");socket.emit("room:create",{name:$("hostName").value,count:$("count").value,theme:$("theme").value})};
+$("join").onclick=()=>{err("");socket.emit("room:join",{code:$("room").value,name:$("playerName").value})};
+$("start").onclick=()=>socket.emit("game:start");
+$("next").onclick=()=>socket.emit("game:next");
+$("leave").onclick=()=>location.reload();
+$("again").onclick=()=>location.reload();
+
+socket.on("room:created",d=>{isHost=true;$("code").textContent=d.code;show("lobby")});
+socket.on("room:joined",d=>{isHost=false;$("code").textContent=d.code;show("lobby")});
+socket.on("error:message",err);
+socket.on("room:closed",()=>{alert("El anfitrión cerró la sala.");location.reload()});
+
+socket.on("lobby:update",d=>{
+ $("lobbyPlayers").innerHTML=d.players.map((p,i)=>`<div class="player">#${i+1} ${p.name}${p.host?" 👑":""}</div>`).join("");
+ $("start").disabled=!isHost||d.players.length<1;
+});
+
+socket.on("game:question",d=>{
+ show("game"); currentTime=d.time; $("qnum").textContent=`Pregunta ${d.index+1}/${d.total}`;$("topic").textContent=d.tema;
+ $("q").textContent=d.question;$("status").textContent="Elige tu respuesta";
+ $("answers").innerHTML=d.answers.map((a,i)=>`<button class="ans" data-i="${i}">${["🔴","🔵","🟡","🟢"][i]} ${a}</button>`).join("");
+ document.querySelectorAll(".ans").forEach(b=>b.onclick=()=>answer(Number(b.dataset.i),b));
+ startTimer(d.time);
+});
+function startTimer(seconds){clearInterval(timer);let left=seconds;updateTimer(left);timer=setInterval(()=>{left-=.1;updateTimer(left);if(left<=0)clearInterval(timer)},100)}
+function updateTimer(left){$("timer").textContent=Math.max(0,Math.ceil(left))+"s";$("fill").style.width=Math.max(0,left/currentTime*100)+"%"}
+function answer(choice,button){
+ document.querySelectorAll(".ans").forEach(b=>b.disabled=true);button.style.outline="4px solid #fff";
+ $("status").textContent="Respuesta enviada. Esperando...";
+ socket.emit("game:answer",{choice});
+}
+socket.on("answer:accepted",d=>{$("status").textContent=d.correct?"✅ ¡Correcta!":"❌ Incorrecta";});
+socket.on("players:answers",d=>{$("status").textContent=`Respuestas: ${d.answered}/${d.total}`});
+socket.on("game:reveal",d=>{
+ clearInterval(timer);show("reveal");$("revealTitle").textContent=`Respuesta correcta: ${["A","B","C","D"][d.correct]}`;
+ $("leaderboard").innerHTML=d.leaderboard.slice(0,10).map((p,i)=>`<div class="rank"><span>${i<3?["🥇","🥈","🥉"][i]:i+1+"."} ${p.name}</span><b>${p.score}</b></div>`).join("");
+ $("next").style.display=isHost?"inline-block":"none";
+});
+socket.on("game:finished",d=>{
+ show("finish");$("finalBoard").innerHTML=d.leaderboard.map((p,i)=>`<div class="rank"><span>${i<3?["🥇","🥈","🥉"][i]:i+1+"."} ${p.name}</span><b>${p.score} pts</b></div>`).join("");
+});
+</script></body></html>

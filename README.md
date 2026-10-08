@@ -1,11 +1,15 @@
 # Kahoot Agronomía Online
 
-Juego multijugador en tiempo real con las 150 preguntas de Agronomía.
+Proyecto multijugador en tiempo real con las 150 preguntas de Agronomía.
 
 ## Render
+- Root Directory: vacío
 - Build Command: `npm install`
 - Start Command: `npm start`
-- Root Directory: vacío
-- Instance Type: Free
+- Plan: Free
 
-La ruta `/` sirve explícitamente `public/index.html` y `/health` devuelve `OK`.
+Los archivos del sitio están en la raíz del repositorio:
+- `index.html`
+- `questions.js`
+- `server.js`
+- `package.json`
